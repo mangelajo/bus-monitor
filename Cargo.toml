@@ -1,0 +1,41 @@
+[package]
+name = "mobil-monitor"
+version = "0.1.0"
+authors = ["Miguel Angel Ajo Pelayo <miguelangel@ajo.es>"]
+edition = "2021"
+#edition = "2018"
+#resolver = "2"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+pio = ["esp-idf-sys/pio"]
+
+[dependencies]
+esp-idf-sys = { version = "0.31.9", features = ["binstart"] }
+esp-idf-svc = "0.42.1"
+esp-idf-hal = "0.38.1"
+embedded-svc = "0.22.3"
+embedded-hal = "0.2.7"
+anyhow = {version = "1", features = ["backtrace"]}
+log = "0.4"
+tinytga = { git = "https://github.com/embedded-graphics/tinytga", branch="master" }
+
+# Display interface and libraries
+embedded-graphics = "0.7"
+display-interface = "0.4"
+display-interface-spi = "0.4"
+ili9341 = { version = "0.5", git = "https://github.com/yuri91/ili9341-rs", rev = "32ca780" }
+shared-bus = "0.2.4"
+
+[build-dependencies]
+embuild = "0.30"
+anyhow = "1"
+
+[package.metadata.espflash]
+partition_table = "partitions.csv"
