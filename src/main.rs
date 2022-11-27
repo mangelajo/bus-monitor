@@ -1,20 +1,21 @@
 pub mod peripherals;
+pub mod emtmadrid {
+    pub mod bus;
+    pub mod lib;
+    pub mod login;
+}
 
-use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 use embedded_svc::wifi::*;
 use esp_idf_svc::wifi::*;
+use esp_idf_svc::{netif::EspNetifStack, nvs::EspDefaultNvs, sysloop::EspSysLoopStack};
+use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 use std::sync::Arc;
-use std::time::Duration;
 use std::thread;
-use esp_idf_svc::{
-    netif::EspNetifStack,
-    sysloop::EspSysLoopStack,
-    nvs::EspDefaultNvs
-};
+use std::time::Duration;
 
 use log::*;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 const SSID: &str = env!("RUST_ESP32_STD_DEMO_WIFI_SSID");
 const PASS: &str = env!("RUST_ESP32_STD_DEMO_WIFI_PASS");
@@ -26,7 +27,7 @@ extern "C" {
     fn esp_deep_sleep_start() -> i32;
 }
 
-fn main() -> Result<()>  {
+fn main() -> Result<()> {
     // Temporary. Will disappear once ESP-IDF 4.4 is released, but for now it is necessary to call this function once,
     // or else some patches to the runtime implemented by esp-idf-sys might not link properly.
     esp_idf_sys::link_patches();
@@ -52,17 +53,15 @@ fn main() -> Result<()>  {
 
     display.send("EMTMadrid Login OK".to_string())?;
 
-    for _n in 1..50 {
+    for _n in 1..10 {
         let arrivals = client.get_arrivals()?;
         display.send(String::from(""))?;
-
-
 
         for arrival in arrivals {
             let time;
             if arrival.arrival_time == 0 {
                 time = String::from(">>>>>>");
-            } else if arrival.arrival_time > 9999 {
+            } else if arrival.arrival_time > 19999 {
                 time = String::from("      ");
             } else {
                 let time_m = arrival.arrival_time / 60;
@@ -70,16 +69,21 @@ fn main() -> Result<()>  {
                 time = format!("{}m {:02}s", time_m, time_s);
             }
 
-            display.send(format!("{:3} {:15} {}", arrival.line, arrival.destination, time))?;
+            display.send(format!(
+                "{:3} {:15} {}",
+                arrival.line, arrival.destination, time
+            ))?;
         }
-        thread::sleep(Duration::from_millis(5000));
-
+        display.send(String::from("*"))?;
+        thread::sleep(Duration::from_millis(60000));
     }
-    
-    drop(display);
-    thread::sleep(Duration::from_millis(2000));
 
-    unsafe { esp_deep_sleep_start();}
+    drop(display);
+    thread::sleep(Duration::from_millis(30000));
+
+    unsafe {
+        esp_deep_sleep_start();
+    }
     Ok(())
 }
 
@@ -137,7 +141,6 @@ fn setup_wifi(
     ) = status
     {
         info!("Wifi connected to {} with IP {}", SSID, ip_settings.ip);
-
     } else {
         bail!("Unexpected Wifi status: {:?}", status);
     }
@@ -145,8 +148,7 @@ fn setup_wifi(
     Ok(wifi)
 }
 
-
-struct EMTMadridClient <'a>{
+struct EMTMadridClient<'a> {
     access_token: Option<String>,
     email: &'a str,
     password: &'a str,
@@ -159,8 +161,10 @@ struct ArrivalTime {
 }
 
 impl EMTMadridClient<'_> {
-    pub fn new_from_email<'a>(email: &'a str, password: &'a str) -> anyhow::Result<EMTMadridClient<'a>> {
-        
+    pub fn new_from_email<'a>(
+        email: &'a str,
+        password: &'a str,
+    ) -> anyhow::Result<EMTMadridClient<'a>> {
         let mut client = EMTMadridClient {
             access_token: None,
             email: email,
@@ -177,33 +181,33 @@ impl EMTMadridClient<'_> {
         use embedded_svc::io;
         use esp_idf_svc::http::client::*;
         use serde_json::Value;
-    
+
         let url = String::from("https://openapi.emtmadrid.es/v1/mobilitylabs/user/login/");
-    
+
         let mut client = EspHttpClient::new(&EspHttpClientConfiguration {
             crt_bundle_attach: Some(esp_idf_sys::esp_crt_bundle_attach),
-    
+
             ..Default::default()
         })?;
-    
+
         let mut request = client.get(&url)?;
-        
+
         request.set_header("email", self.email);
         request.set_header("password", self.password);
-    
+
         let mut response = request.submit()?;
-    
+
         let mut body = [0_u8; 3048];
-    
+
         let (body, _) = io::read_max(response.reader(), &mut body)?;
 
         let v: Value = serde_json::from_slice(body)?;
 
         if let Value::String(token) = &v["data"][0]["accessToken"] {
-          self.access_token = Some(token.clone());
-          return Ok(())
+            self.access_token = Some(token.clone());
+            return Ok(());
         } else {
-          dbg!(&v);
+            dbg!(&v);
         }
         Err(anyhow::anyhow!("Error logging in, access token not found"))
     }
@@ -214,25 +218,28 @@ impl EMTMadridClient<'_> {
         use esp_idf_svc::http::client::*;
         use serde_json::Value;
 
-        let mut arrivals_r:Vec<ArrivalTime> = Vec::new();
-    
-        let url = String::from("https://openapi.emtmadrid.es/v2/transport/busemtmad/stops/874/arrives/");
-    
+        let mut arrivals_r: Vec<ArrivalTime> = Vec::new();
+
+        let url =
+            String::from("https://openapi.emtmadrid.es/v2/transport/busemtmad/stops/874/arrives/");
+
         let mut client = EspHttpClient::new(&EspHttpClientConfiguration {
             crt_bundle_attach: Some(esp_idf_sys::esp_crt_bundle_attach),
-    
+
             ..Default::default()
         })?;
-    
+
         let mut request = client.post(&url)?;
 
         request.set_header("accessToken", self.access_token.as_ref().unwrap());
         request.set_header("Content-Type", "application/json");
 
-        let mut response = request.send_str(r#"{"Text_EstimationsRequired_YN" : "Y"}"#)?.submit()?;
-    
+        let mut response = request
+            .send_str(r#"{"Text_EstimationsRequired_YN" : "Y"}"#)?
+            .submit()?;
+
         let mut body = [0_u8; 3048];
-    
+
         let (body, _) = io::read_max(response.reader(), &mut body)?;
 
         let v: Value = serde_json::from_slice(body)?;
@@ -244,17 +251,19 @@ impl EMTMadridClient<'_> {
                 let destination = &arrival["destination"].as_str().unwrap();
                 let line = &arrival["line"].as_str().unwrap();
                 let estimate_arrival_secs = &arrival["estimateArrive"].as_u64().unwrap();
-                
+
                 let arrival_time = ArrivalTime {
                     line: line.to_string(),
                     destination: destination.to_string(),
                     arrival_time: *estimate_arrival_secs,
                 };
                 arrivals_r.push(arrival_time);
-            }   
-          } else {
-            return Err(anyhow::anyhow!("Error getting arrivals, arrivals not found"));
-          }
+            }
+        } else {
+            return Err(anyhow::anyhow!(
+                "Error getting arrivals, arrivals not found"
+            ));
+        }
 
         Ok(arrivals_r)
     }
