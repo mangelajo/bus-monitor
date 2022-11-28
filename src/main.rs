@@ -90,7 +90,7 @@ fn setup_wifi(
     default_nvs: Arc<EspDefaultNvs>,
 ) -> Result<Box<EspWifi>, anyhow::Error> {
     let mut wifi = Box::new(EspWifi::new(netif_stack, sys_loop_stack, default_nvs)?);
-
+/* 
     info!("Wifi created, about to scan");
 
     let ap_infos = wifi.scan()?;
@@ -110,19 +110,20 @@ fn setup_wifi(
         );
         None
     };
-
-    wifi.set_configuration(&Configuration::Mixed(
+ */
+    wifi.set_configuration(&Configuration::Client( //Mixed
         ClientConfiguration {
             ssid: SSID.into(),
             password: PASS.into(),
-            channel,
+            channel: None.into(), /* channel */
             ..Default::default()
         },
-        AccessPointConfiguration {
-            ssid: "aptest".into(),
+ /*       AccessPointConfiguration {
+            ssid: "busmonitor".into(),
             channel: channel.unwrap_or(1),
             ..Default::default()
         },
+        */
     ))?;
 
     info!("Wifi configuration set, about to get status");
@@ -134,7 +135,7 @@ fn setup_wifi(
 
     if let Status(
         ClientStatus::Started(ClientConnectionStatus::Connected(ClientIpStatus::Done(ip_settings))),
-        ApStatus::Started(ApIpStatus::Done),
+        ApStatus::Stopped, //ApStatus::Started(ApIpStatus::Done),
     ) = status
     {
         info!("Wifi connected to {} with IP {}", SSID, ip_settings.ip);
