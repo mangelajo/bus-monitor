@@ -1,9 +1,5 @@
 pub mod peripherals;
-pub mod emtmadrid {
-    pub mod bus;
-    pub mod lib;
-    pub mod login;
-}
+pub mod emtmadrid;
 
 use embedded_svc::wifi::*;
 use esp_idf_svc::wifi::*;
@@ -12,6 +8,7 @@ use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, alway
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use emtmadrid::EMTMadridClient;
 
 use log::*;
 
@@ -54,7 +51,7 @@ fn main() -> Result<()> {
     display.send("EMTMadrid Login OK".to_string())?;
 
     for _n in 1..10 {
-        let arrivals = client.get_arrivals()?;
+        let arrivals = client.get_arrival_times("874")?;
         display.send(String::from(""))?;
 
         for arrival in arrivals {
@@ -146,125 +143,4 @@ fn setup_wifi(
     }
 
     Ok(wifi)
-}
-
-struct EMTMadridClient<'a> {
-    access_token: Option<String>,
-    email: &'a str,
-    password: &'a str,
-}
-
-struct ArrivalTime {
-    line: String,
-    destination: String,
-    arrival_time: u64,
-}
-
-impl EMTMadridClient<'_> {
-    pub fn new_from_email<'a>(
-        email: &'a str,
-        password: &'a str,
-    ) -> anyhow::Result<EMTMadridClient<'a>> {
-        let mut client = EMTMadridClient {
-            access_token: None,
-            email: email,
-            password: password,
-        };
-
-        client.login()?;
-
-        Ok(client)
-    }
-
-    pub fn login(&mut self) -> anyhow::Result<()> {
-        use embedded_svc::http::client::*;
-        use embedded_svc::io;
-        use esp_idf_svc::http::client::*;
-        use serde_json::Value;
-
-        let url = String::from("https://openapi.emtmadrid.es/v1/mobilitylabs/user/login/");
-
-        let mut client = EspHttpClient::new(&EspHttpClientConfiguration {
-            crt_bundle_attach: Some(esp_idf_sys::esp_crt_bundle_attach),
-
-            ..Default::default()
-        })?;
-
-        let mut request = client.get(&url)?;
-
-        request.set_header("email", self.email);
-        request.set_header("password", self.password);
-
-        let mut response = request.submit()?;
-
-        let mut body = [0_u8; 3048];
-
-        let (body, _) = io::read_max(response.reader(), &mut body)?;
-
-        let v: Value = serde_json::from_slice(body)?;
-
-        if let Value::String(token) = &v["data"][0]["accessToken"] {
-            self.access_token = Some(token.clone());
-            return Ok(());
-        } else {
-            dbg!(&v);
-        }
-        Err(anyhow::anyhow!("Error logging in, access token not found"))
-    }
-
-    pub fn get_arrivals(&self) -> anyhow::Result<Vec<ArrivalTime>> {
-        use embedded_svc::http::client::*;
-        use embedded_svc::io;
-        use esp_idf_svc::http::client::*;
-        use serde_json::Value;
-
-        let mut arrivals_r: Vec<ArrivalTime> = Vec::new();
-
-        let url =
-            String::from("https://openapi.emtmadrid.es/v2/transport/busemtmad/stops/874/arrives/");
-
-        let mut client = EspHttpClient::new(&EspHttpClientConfiguration {
-            crt_bundle_attach: Some(esp_idf_sys::esp_crt_bundle_attach),
-
-            ..Default::default()
-        })?;
-
-        let mut request = client.post(&url)?;
-
-        request.set_header("accessToken", self.access_token.as_ref().unwrap());
-        request.set_header("Content-Type", "application/json");
-
-        let mut response = request
-            .send_str(r#"{"Text_EstimationsRequired_YN" : "Y"}"#)?
-            .submit()?;
-
-        let mut body = [0_u8; 3048];
-
-        let (body, _) = io::read_max(response.reader(), &mut body)?;
-
-        let v: Value = serde_json::from_slice(body)?;
-
-        // dbg!(&v);
-
-        if let Value::Array(arrivals) = &v["data"][0]["Arrive"] {
-            for arrival in arrivals {
-                let destination = &arrival["destination"].as_str().unwrap();
-                let line = &arrival["line"].as_str().unwrap();
-                let estimate_arrival_secs = &arrival["estimateArrive"].as_u64().unwrap();
-
-                let arrival_time = ArrivalTime {
-                    line: line.to_string(),
-                    destination: destination.to_string(),
-                    arrival_time: *estimate_arrival_secs,
-                };
-                arrivals_r.push(arrival_time);
-            }
-        } else {
-            return Err(anyhow::anyhow!(
-                "Error getting arrivals, arrivals not found"
-            ));
-        }
-
-        Ok(arrivals_r)
-    }
 }
