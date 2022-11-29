@@ -50,7 +50,7 @@ fn main() -> Result<()> {
 
     display.send("EMTMadrid Login OK".to_string())?;
 
-    for _n in 1..10 {
+    for _n in 1..50 {
         let arrivals = client.get_arrival_times("874")?;
         display.send(String::from(""))?;
 
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
             ))?;
         }
         display.send(String::from("*"))?;
-        thread::sleep(Duration::from_millis(60000));
+        thread::sleep(Duration::from_millis(5000));
     }
 
     drop(display);

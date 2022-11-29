@@ -18,7 +18,6 @@ pub fn init() -> Result<mpsc::SyncSender<String>> {
         pins.gpio5,
     )?;
 
-    #[cfg(esp32s3)]
     let msg_sender = display::start(
         pins.gpio4,
         pins.gpio16,

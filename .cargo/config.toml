@@ -16,7 +16,7 @@ runner = "espflash --monitor"
 
 [target.xtensa-esp32s3-espidf]
 linker = "ldproxy"
-runner = "espflash --monitor"
+runner = "espflash flash --monitor -b 921600"
 
 [target.riscv32imc-esp-espidf]
 linker = "ldproxy"

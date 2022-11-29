@@ -19,16 +19,16 @@ use embedded_hal::digital::v2::OutputPin;
 
 use display_interface_spi::SPIInterfaceNoCS;
 
-#[cfg(not(esp32s3))]
+#[cfg(feature = "ttgo")]
 use st7789;
 
 //#[cfg(esp32s3)]
-use epd_waveshare::{color::OctColor, epd5in65f::*, prelude::*, graphics::HeapAllocated};
+use epd_waveshare::{color::*, epd3in7::*, prelude::*};
 
 use std;
 use std::sync::mpsc;
 
-#[cfg(not(esp32s3))]
+#[cfg(feature = "ttgo")]
 pub fn start(
     backlight: gpio::Gpio4<gpio::Unknown>,
     dc: gpio::Gpio16<gpio::Unknown>,
@@ -111,7 +111,6 @@ pub fn start(
     Ok(tx)
 }
 
-//#[cfg(esp32s3)]
 pub fn start(
     busy: gpio::Gpio4<gpio::Unknown>,
     dc: gpio::Gpio16<gpio::Unknown>,
@@ -137,7 +136,7 @@ pub fn start(
         },
         config,
     )?;
-
+/* 
     let mut eink = Epd5in65f::new(
         &mut spi_interface,
         cs.into_output()?,
@@ -146,54 +145,46 @@ pub fn start(
         rst.into_output()?,
         &mut delay::FreeRtos,
     )?;
+*/
+    let mut eink = EPD3in7::new(
+        &mut spi_interface,
+        cs.into_output()?,
+        busy.into_input()?,
+        dc.into_output()?,
+        rst.into_output()?,
+        &mut delay::FreeRtos,
+    )?;
+
 
     let (tx, rx) = mpsc::sync_channel::<String>(5);
 
     let _ = std::thread::Builder::new()
-        .stack_size(13_000)
+        .stack_size(4_000)
         .spawn(move || {
-            let mut display: Box<Display5in65f> = Display5in65f::new();
-
-            let black_font = MonoTextStyle::new(&FONT_10X20, OctColor::Black.into());
-            //let red_font = MonoTextStyle::new(&FONT_10x20, OctColor::Red.into());
-
+            
+            let mut display = Box::new(Display3in7::default());
+            display.clear(Color::Black).unwrap();
+            eink.update_and_display_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
+            .unwrap();
+            display.clear(Color::White).unwrap();
+            eink.update_and_display_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
+            .unwrap();
+            display.set_rotation(DisplayRotation::Rotate90);
+            
+             
+            let black_font = MonoTextStyle::new(&FONT_10X20, Color::Black);
+    
             let height = 20;
             let mut y = height;
 
             for msg in rx {
                 println!("Display: {}", msg);
                 if msg == "" {
-                    display.clear(OctColor::White.into()).unwrap();
+                    display.clear(Color::White).unwrap();
                     y = height;
                     continue;
                 } else if msg == "*" {
-
-                    let _ = Line::new(Point::new(0, 0), Point::new(100, 100))
-                    .into_styled(PrimitiveStyle::with_stroke(OctColor::Yellow, 2))
-                    .draw(&mut *display);
-      
-                    let _ = Line::new(Point::new(0, 0), Point::new(150, 100))
-                    .into_styled(PrimitiveStyle::with_stroke(OctColor::Green, 2))
-                    .draw(&mut *display);
-                    let _ = Line::new(Point::new(0, 0), Point::new(200, 100))
-                    .into_styled(PrimitiveStyle::with_stroke(OctColor::Blue, 2))
-                    .draw(&mut *display);
-      
-                    let _ = Line::new(Point::new(0, 0), Point::new(250, 100))
-                    .into_styled(PrimitiveStyle::with_stroke(OctColor::Orange, 2))
-                    .draw(&mut *display);
-      
-                    let _ = Line::new(Point::new(0, 0), Point::new(300, 100))
-                    .into_styled(PrimitiveStyle::with_stroke(OctColor::Red, 2))
-                    .draw(&mut *display);
-      
-                    let _ = Line::new(Point::new(0, 0), Point::new(100, 50))
-                    .into_styled(PrimitiveStyle::with_stroke(OctColor::HiZ, 2))
-                    .draw(&mut *display);
-      
-                    eink.update_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
-                        .unwrap();
-                    eink.display_frame(&mut spi_interface, &mut delay::FreeRtos)
+                    eink.update_and_display_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
                         .unwrap();
                     continue;
                 }
@@ -204,12 +195,11 @@ pub fn start(
                 y += height;
             }
 
-            display.clear(OctColor::White.into()).unwrap();
-            eink.update_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
-            .unwrap();
-            eink.display_frame(&mut spi_interface, &mut delay::FreeRtos)
-            .unwrap();
-
+            display.clear(Color::White).unwrap();
+             
+            eink.update_and_display_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
+                        .unwrap();
+            
         });
 
     Ok(tx)
