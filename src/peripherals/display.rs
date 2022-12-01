@@ -1,4 +1,5 @@
 use anyhow::Result;
+use embedded_graphics::image::ImageRaw;
 use embedded_graphics::mono_font::iso_8859_1::FONT_9X18_BOLD;
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::prelude::*;
@@ -15,6 +16,8 @@ use epd_waveshare::{color::*, epd3in7::*, prelude::*};
 
 use std;
 use std::sync::mpsc;
+
+use crate::emtmadrid::ArrivalTime;
 
 #[cfg(feature = "ttgo")]
 pub fn start(
@@ -97,6 +100,13 @@ pub fn start(
     Ok(tx)
 }
 
+
+pub struct DisplayDetails {
+    pub buses: Vec<ArrivalTime>,
+    pub battery: f32,
+    pub wifi: u8,
+}
+
 pub fn start(
     busy: gpio::Gpio4<gpio::Unknown>,
     dc: gpio::Gpio16<gpio::Unknown>,
@@ -159,11 +169,22 @@ pub fn start(
             let height = black_font.font.character_size.height as i32;
             let mut y = height;
 
+            let bus = &ImageRaw::new_binary(include_bytes!("../../icons/Bus.raw"), 30);
+            let bus2 = &ImageRaw::new_binary(include_bytes!("../../icons/Bus2.raw"), 30);
+            let work = &ImageRaw::new_binary(include_bytes!("../../icons/Work.raw"), 30);
+            let school = &ImageRaw::new_binary(include_bytes!("../../icons/School.raw"), 30);
+            let batt2 = &ImageRaw::new_binary(include_bytes!("../../icons/Batt2.raw"), 30);
+
             for msg in rx {
                 println!("Display: {}", msg);
                 if msg.is_empty() {
                     display.clear(Color::White).unwrap();
                     y = height;
+                    bus.draw(&mut display.translated(Point::new(100,200)).color_converted()).unwrap();
+                    bus2.draw(&mut display.translated(Point::new(140,200)).color_converted()).unwrap();
+                    work.draw(&mut display.translated(Point::new(180,200)).color_converted()).unwrap();
+                    school.draw(&mut display.translated(Point::new(220,200)).color_converted()).unwrap();
+                    batt2.draw(&mut display.translated(Point::new(260,200)).color_converted()).unwrap();
                     continue;
                 } else if msg == "*" {
                     eink.update_and_display_frame(

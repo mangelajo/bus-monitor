@@ -8,11 +8,12 @@ pub struct EMTMadridClient<'a> {
     email: &'a str,
     password: &'a str,
 }
-
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ArrivalTime {
+    pub arrival_time: u64,
+    pub stop: String,
     pub line: String,
     pub destination: String,
-    pub arrival_time: u64,
 }
 
 impl EMTMadridClient<'_> {
@@ -112,6 +113,7 @@ impl EMTMadridClient<'_> {
                 let estimate_arrival_secs = &arrival["estimateArrive"].as_u64().unwrap();
 
                 arrival_times.push(ArrivalTime {
+                    stop: stop_id.to_string(),
                     line: line.to_string(),
                     destination: destination.to_string(),
                     arrival_time: *estimate_arrival_secs,
