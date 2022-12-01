@@ -1,23 +1,11 @@
-use std::thread;
-use std::time::Duration;
-
-//use embedded_graphics::mono_font::iso_8859_1::FONT_6X12;
 use anyhow::Result;
-use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
-use esp_idf_hal::prelude::*;
-use esp_idf_hal::spi;
-
+use embedded_graphics::mono_font::iso_8859_1::FONT_9X18_BOLD;
 use embedded_graphics::mono_font::MonoTextStyle;
-use embedded_graphics::pixelcolor::*;
 use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::*;
 use embedded_graphics::text::*;
 
-use esp_idf_hal::{delay, gpio};
-//use embedded_hal::blocking::delay::DelayMs;
-use embedded_hal::digital::v2::OutputPin;
-
-use display_interface_spi::SPIInterfaceNoCS;
+use esp_idf_hal::prelude::*;
+use esp_idf_hal::{delay, gpio, spi};
 
 #[cfg(feature = "ttgo")]
 use st7789;
@@ -38,8 +26,6 @@ pub fn start(
     sdo: gpio::Gpio19<gpio::Unknown>,
     cs: gpio::Gpio5<gpio::Unknown>,
 ) -> Result<mpsc::SyncSender<String>> {
-    // Speed here could be faster, but the touch screen controller
-    // is on the same SPI bus
     let config = <spi::config::Config as Default>::default().baudrate(26.MHz().into());
 
     let di = SPIInterfaceNoCS::new(
@@ -120,8 +106,6 @@ pub fn start(
     sdo: gpio::Gpio19<gpio::Unknown>,
     cs: gpio::Gpio5<gpio::Unknown>,
 ) -> Result<mpsc::SyncSender<String>> {
-    // Speed here could be faster, but the touch screen controller
-    // is on the same SPI bus
     let config = <spi::config::Config as Default>::default().baudrate(26.MHz().into());
 
     println!("Setup eink display SPI interface");
@@ -136,16 +120,7 @@ pub fn start(
         },
         config,
     )?;
-/* 
-    let mut eink = Epd5in65f::new(
-        &mut spi_interface,
-        cs.into_output()?,
-        busy.into_input()?,
-        dc.into_output()?,
-        rst.into_output()?,
-        &mut delay::FreeRtos,
-    )?;
-*/
+
     let mut eink = EPD3in7::new(
         &mut spi_interface,
         cs.into_output()?,
@@ -155,37 +130,48 @@ pub fn start(
         &mut delay::FreeRtos,
     )?;
 
+    eink.set_lut(&mut spi_interface, Some(RefreshLut::Quick))?;
 
     let (tx, rx) = mpsc::sync_channel::<String>(5);
 
     let _ = std::thread::Builder::new()
         .stack_size(4_000)
         .spawn(move || {
-            
             let mut display = Box::new(Display3in7::default());
             display.clear(Color::Black).unwrap();
-            eink.update_and_display_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
+            eink.update_and_display_frame(
+                &mut spi_interface,
+                display.buffer(),
+                &mut delay::FreeRtos,
+            )
             .unwrap();
             display.clear(Color::White).unwrap();
-            eink.update_and_display_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
+            eink.update_and_display_frame(
+                &mut spi_interface,
+                display.buffer(),
+                &mut delay::FreeRtos,
+            )
             .unwrap();
             display.set_rotation(DisplayRotation::Rotate90);
-            
-             
-            let black_font = MonoTextStyle::new(&FONT_10X20, Color::Black);
-    
-            let height = 20;
+
+            let black_font = MonoTextStyle::new(&FONT_9X18_BOLD, Color::Black);
+
+            let height = black_font.font.character_size.height as i32;
             let mut y = height;
 
             for msg in rx {
                 println!("Display: {}", msg);
-                if msg == "" {
+                if msg.is_empty() {
                     display.clear(Color::White).unwrap();
                     y = height;
                     continue;
                 } else if msg == "*" {
-                    eink.update_and_display_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
-                        .unwrap();
+                    eink.update_and_display_frame(
+                        &mut spi_interface,
+                        display.buffer(),
+                        &mut delay::FreeRtos,
+                    )
+                    .unwrap();
                     continue;
                 }
 
@@ -196,10 +182,16 @@ pub fn start(
             }
 
             display.clear(Color::White).unwrap();
-             
-            eink.update_and_display_frame(&mut spi_interface, display.buffer(), &mut delay::FreeRtos)
-                        .unwrap();
-            
+            eink.set_lut(&mut spi_interface, Some(RefreshLut::Full))
+                .unwrap();
+            eink.update_and_display_frame(
+                &mut spi_interface,
+                display.buffer(),
+                &mut delay::FreeRtos,
+            )
+            .unwrap();
+            eink.sleep(&mut spi_interface, &mut delay::FreeRtos)
+                .unwrap();
         });
 
     Ok(tx)

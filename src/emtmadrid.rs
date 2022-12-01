@@ -1,4 +1,7 @@
-use std;
+use embedded_svc::http::client::*;
+use embedded_svc::io;
+use esp_idf_svc::http::client::*;
+use serde_json::Value;
 
 pub struct EMTMadridClient<'a> {
     access_token: Option<String>,
@@ -12,7 +15,6 @@ pub struct ArrivalTime {
     pub arrival_time: u64,
 }
 
-
 impl EMTMadridClient<'_> {
     pub fn new_from_email<'a>(
         email: &'a str,
@@ -20,8 +22,8 @@ impl EMTMadridClient<'_> {
     ) -> anyhow::Result<EMTMadridClient<'a>> {
         let mut client = EMTMadridClient {
             access_token: None,
-            email: email,
-            password: password,
+            email,
+            password,
         };
 
         client.login()?;
@@ -36,19 +38,14 @@ impl EMTMadridClient<'_> {
     ) -> anyhow::Result<EMTMadridClient<'a>> {
         let client = EMTMadridClient {
             access_token: Some(String::from(token)),
-            email: email,
-            password: password,
+            email,
+            password,
         };
 
         Ok(client)
     }
 
     pub fn login(&mut self) -> anyhow::Result<()> {
-        use embedded_svc::http::client::*;
-        use embedded_svc::io;
-        use esp_idf_svc::http::client::*;
-        use serde_json::Value;
-
         let url = String::from("https://openapi.emtmadrid.es/v1/mobilitylabs/user/login/");
 
         let mut client = EspHttpClient::new(&EspHttpClientConfiguration {
@@ -80,11 +77,6 @@ impl EMTMadridClient<'_> {
     }
 
     pub fn get_arrival_times(&self, stop_id: &str) -> anyhow::Result<Vec<ArrivalTime>> {
-        use embedded_svc::http::client::*;
-        use embedded_svc::io;
-        use esp_idf_svc::http::client::*;
-        use serde_json::Value;
-
         let url = format!(
             "https://openapi.emtmadrid.es/v1/transport/busemtmad/stops/{}/arrives/",
             stop_id
@@ -134,4 +126,3 @@ impl EMTMadridClient<'_> {
         Ok(arrival_times)
     }
 }
-
