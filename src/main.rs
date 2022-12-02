@@ -9,6 +9,7 @@ use std::time::*;
 use log::*;
 
 use anyhow::Result;
+use time::UtcOffset;
 
 use crate::emtmadrid::ArrivalTime;
 use crate::emtmadrid::EMTMadridClient;
@@ -18,7 +19,7 @@ use crate::peripherals::display::DisplayMessage;
 use esp_idf_svc::sntp;
 use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 use esp_idf_sys::time_t;
-//use time::macros::offset;
+
 use time::OffsetDateTime;
 
 use esp_idf_svc::sntp::SyncStatus;
@@ -52,50 +53,25 @@ fn main() -> Result<()> {
     display.send(DisplayMessage::Message("EMTMadrid Login OK".to_string()))?;
     display.send(DisplayMessage::Update)?;
 
-    /* Unsafe section is used since it's required, if you're using C functions and datatypes */
-    unsafe {
-        let sntp = sntp::EspSntp::new_default()?;
-        info!("SNTP initialized, waiting for status!");
+    let sntp = sntp::EspSntp::new_default()?;
+    display.send(DisplayMessage::Message(
+        "Updating time via SNTP".to_string(),
+    ))?;
 
-        while sntp.get_sync_status() != SyncStatus::Completed {}
+    while sntp.get_sync_status() != SyncStatus::Completed {}
 
-        info!("SNTP status received!");
+    display.send(DisplayMessage::Message("Time updated".to_string()))?;
 
-        let timer: *mut time_t = ptr::null_mut();
+    let actual_time = get_time();
 
-        let mut timestamp = esp_idf_sys::time(timer);
-
-        let mut actual_date = OffsetDateTime::from_unix_timestamp(timestamp as i64)?
-            // .to_offset(offset!(+2))
-            .date();
-
-        display.send(DisplayMessage::Message(actual_date.to_string()))?;
-        display.send(DisplayMessage::Update)?;
-    }
+    display.send(DisplayMessage::Message(actual_time.to_string()))?;
+    display.send(DisplayMessage::Update)?;
 
     for _n in 1..200 {
-        let mut arrivals = Vec::<ArrivalTime>::new();
-
-        match client.get_arrival_times("874") {
-            Ok(arr) => {
-                arrivals.append(&mut arr.clone());
-            }
-            Err(e) => {
-                error!("Error getting arrival times: {}", e);
-            }
-        }
-
-        match client.get_arrival_times("1455") {
-            Ok(arr) => {
-                arrivals.append(&mut arr.clone());
-            }
-            Err(e) => {
-                error!("Error getting arrival times: {}", e);
-            }
-        }
-
-        info!("Arrivals: {:?}", arrivals);
+        display.send(DisplayMessage::Clear)?;
+        let arrivals = get_my_arrivals(&client);
         display.send(DisplayMessage::Arrivals(arrivals))?;
+        display.send(DisplayMessage::Update)?;
 
         thread::sleep(Duration::from_millis(5000));
     }
@@ -109,30 +85,37 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/*
-
-    display.send(String::from("")).unwrap();
-
-    for arrival in arrivals {
-        let time;
-        if arrival.arrival_time == 0 {
-            time = String::from(">>>>>>");
-        } else if arrival.arrival_time > 19999 {
-            time = String::from("      ");
-        } else {
-            let time_m = arrival.arrival_time / 60;
-            let time_s = arrival.arrival_time % 60;
-            time = format!("{}m {:02}s", time_m, time_s);
-        }
-
-        display.send(format!(
-            "{:3} {:15} {}",
-            arrival.line, arrival.destination, time
-        ))?;
+pub fn get_time() -> time::OffsetDateTime {
+    let timestamp;
+    unsafe {
+        let timer: *mut time_t = ptr::null_mut();
+        timestamp = esp_idf_sys::time(timer);
     }
-    display.send(String::from("*")).unwrap();
+
+    let actual_time = OffsetDateTime::from_unix_timestamp(timestamp as i64)
+        .unwrap()
+        .to_offset(UtcOffset::from_hms(1, 0, 0).unwrap());
+    actual_time
 }
-Err(e) => {
-    display.send(format!("Error: {}", e)).unwrap();
-    display.send(String::from("*")).unwrap();
-} */
+
+fn get_my_arrivals(client: &EMTMadridClient) -> Vec<ArrivalTime> {
+    let mut arrivals = Vec::<ArrivalTime>::new();
+    match client.get_arrival_times("874") {
+        Ok(arr) => {
+            arrivals = arr.clone();
+        }
+        Err(e) => {
+            error!("Error getting arrival times: {}", e);
+        }
+    }
+    match client.get_arrival_times("1455") {
+        Ok(arr) => {
+            arrivals.append(&mut arr.clone());
+        }
+        Err(e) => {
+            error!("Error getting arrival times: {}", e);
+        }
+    }
+    arrivals.sort();
+    arrivals
+}

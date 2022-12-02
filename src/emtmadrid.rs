@@ -10,7 +10,7 @@ pub struct EMTMadridClient<'a> {
 }
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone)]
 pub struct ArrivalTime {
-    pub arrival_time: u64,
+    pub time: u64,
     pub stop: String,
     pub line: String,
     pub destination: String,
@@ -98,7 +98,7 @@ impl EMTMadridClient<'_> {
             .send_str(r#"{"Text_EstimationsRequired_YN" : "Y"}"#)?
             .submit()?;
 
-        let mut body = [0_u8; 3048];
+        let mut body = [0_u8; 4048];
 
         let (body, _) = io::read_max(response.reader(), &mut body)?;
 
@@ -116,7 +116,7 @@ impl EMTMadridClient<'_> {
                     stop: stop_id.to_string(),
                     line: line.to_string(),
                     destination: destination.to_string(),
-                    arrival_time: *estimate_arrival_secs,
+                    time: *estimate_arrival_secs,
                 });
             }
         } else {
