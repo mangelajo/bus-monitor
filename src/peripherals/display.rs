@@ -100,11 +100,11 @@ pub fn start(
     Ok(tx)
 }
 
-
-pub struct DisplayDetails {
-    pub buses: Vec<ArrivalTime>,
-    pub battery: f32,
-    pub wifi: u8,
+pub enum DisplayMessage {
+    Arrivals(Vec<ArrivalTime>),
+    Message(String),
+    Clear,
+    Update,
 }
 
 pub fn start(
@@ -115,7 +115,7 @@ pub fn start(
     sclk: gpio::Gpio18<gpio::Unknown>,
     sdo: gpio::Gpio19<gpio::Unknown>,
     cs: gpio::Gpio5<gpio::Unknown>,
-) -> Result<mpsc::SyncSender<String>> {
+) -> Result<mpsc::SyncSender<DisplayMessage>> {
     let config = <spi::config::Config as Default>::default().baudrate(26.MHz().into());
 
     println!("Setup eink display SPI interface");
@@ -142,7 +142,7 @@ pub fn start(
 
     eink.set_lut(&mut spi_interface, Some(RefreshLut::Quick))?;
 
-    let (tx, rx) = mpsc::sync_channel::<String>(5);
+    let (tx, rx) = mpsc::sync_channel::<DisplayMessage>(5);
 
     let _ = std::thread::Builder::new()
         .stack_size(4_000)
@@ -176,30 +176,44 @@ pub fn start(
             let batt2 = &ImageRaw::new_binary(include_bytes!("../../icons/Batt2.raw"), 30);
 
             for msg in rx {
-                println!("Display: {}", msg);
-                if msg.is_empty() {
-                    display.clear(Color::White).unwrap();
-                    y = height;
-                    bus.draw(&mut display.translated(Point::new(100,200)).color_converted()).unwrap();
-                    bus2.draw(&mut display.translated(Point::new(140,200)).color_converted()).unwrap();
-                    work.draw(&mut display.translated(Point::new(180,200)).color_converted()).unwrap();
-                    school.draw(&mut display.translated(Point::new(220,200)).color_converted()).unwrap();
-                    batt2.draw(&mut display.translated(Point::new(260,200)).color_converted()).unwrap();
-                    continue;
-                } else if msg == "*" {
-                    eink.update_and_display_frame(
-                        &mut spi_interface,
-                        display.buffer(),
-                        &mut delay::FreeRtos,
-                    )
-                    .unwrap();
-                    continue;
-                }
+                match msg {
+                    DisplayMessage::Clear => {
+                        display.clear(Color::White).unwrap();
+                        y = height;
+                        bus.draw(&mut display.translated(Point::new(100, 200)).color_converted())
+                            .unwrap();
+                        bus2.draw(&mut display.translated(Point::new(140, 200)).color_converted())
+                            .unwrap();
+                        work.draw(&mut display.translated(Point::new(180, 200)).color_converted())
+                            .unwrap();
+                        school
+                            .draw(&mut display.translated(Point::new(220, 200)).color_converted())
+                            .unwrap();
+                        batt2
+                            .draw(&mut display.translated(Point::new(260, 200)).color_converted())
+                            .unwrap();
+                        continue;
+                    }
 
-                Text::new(&msg, Point::new(0, y), black_font)
-                    .draw(&mut *display)
-                    .unwrap();
-                y += height;
+                    DisplayMessage::Update => {
+                        eink.update_and_display_frame(
+                            &mut spi_interface,
+                            display.buffer(),
+                            &mut delay::FreeRtos,
+                        )
+                        .unwrap();
+                        continue;
+                    }
+
+                    DisplayMessage::Message(msg) => {
+                        Text::new(&msg, Point::new(0, y), black_font)
+                            .draw(&mut *display)
+                            .unwrap();
+                        y += height;
+                    }
+
+                    DisplayMessage::Arrivals(arrivals) => {}
+                }
             }
 
             display.clear(Color::White).unwrap();

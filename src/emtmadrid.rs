@@ -8,7 +8,7 @@ pub struct EMTMadridClient<'a> {
     email: &'a str,
     password: &'a str,
 }
-#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd, Clone)]
 pub struct ArrivalTime {
     pub arrival_time: u64,
     pub stop: String,

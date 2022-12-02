@@ -3,7 +3,9 @@ use anyhow::Result;
 use esp_idf_hal::prelude::*;
 use std::sync::mpsc;
 
-pub fn init() -> Result<mpsc::SyncSender<String>> {
+use self::display::DisplayMessage;
+
+pub fn init() -> Result<mpsc::SyncSender<DisplayMessage>> {
     let peripherals = Peripherals::take().unwrap();
     let pins = peripherals.pins;
 
@@ -28,7 +30,7 @@ pub fn init() -> Result<mpsc::SyncSender<String>> {
         pins.gpio5,
     )?;
 
-    msg_sender.send("Display ready".to_string())?;
+    msg_sender.send(DisplayMessage::Message("Display ready".to_string()))?;
 
     Ok(msg_sender)
 }

@@ -33,7 +33,7 @@ embedded-hal = "0.2"
 anyhow = {version = "1", features = ["backtrace"]}
 log = "0.4"
 tinytga = { git = "https://github.com/embedded-graphics/tinytga", branch="master" }
-
+time = { version = "0.3.17", features = ["std"] }
 # Display interface and libraries
 embedded-graphics = "0.7.1"
 display-interface = "0.4"
